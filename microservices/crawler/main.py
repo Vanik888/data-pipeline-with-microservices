@@ -4,10 +4,9 @@ import os
 import sys
 import logging
 import urllib.parse
-
-from pathlib import Path
 from typing import Dict, Any, List
 
+from pathlib import Path
 from aiohttp import ClientSession
 import pandas as pd
 from bs4 import BeautifulSoup
