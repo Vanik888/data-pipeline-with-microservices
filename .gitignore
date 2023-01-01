@@ -3,3 +3,5 @@ venv
 .venv
 data
 .python-version
+__pycharm__
+.idea

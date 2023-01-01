@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import datetime as dt
 import os
@@ -8,9 +9,16 @@ from typing import Dict, Any, List
 
 from pathlib import Path
 from aiohttp import ClientSession
+from dotenv import find_dotenv, load_dotenv
 import pandas as pd
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
+
+load_dotenv(find_dotenv())
+
+BASE_URL = os.environ.get("BASE_URL", "https://www.urparts.com/")
+BASE_HREF = os.environ.get("BASE_HREF", "index.cfm/page/catalogue")
+MODELS_LIMIT = os.environ.get("MODELS_LIMIT", 3)
 
 
 logger = logging.getLogger(__name__)
@@ -153,13 +161,12 @@ async def open_child_pages(
     logger.info(f"finished to open {len(tasks)} {page_type} pages asynchronously")
 
 
-async def run_crawling_tasks():
-    base = "https://www.urparts.com/"
-    href = "index.cfm/page/catalogue"
-    chunk_size = 10
+async def run_crawling_tasks(
+    base_url: str, href: str, chunk_size: int, models_limit: int
+):
 
     async with ClientSession() as session:
-        mp = MainPage(base_url=base, href=href, parents=[])
+        mp = MainPage(base_url=base_url, href=href, parents=[])
         await open_child_pages(
             parent_pages=[
                 mp,
@@ -185,7 +192,8 @@ async def run_crawling_tasks():
             for category_page in category_pages
             for model_page in category_page.get_models()
         ]
-        model_pages = model_pages[:3]
+        if models_limit:
+            model_pages = model_pages[:models_limit]
         await open_child_pages(
             parent_pages=model_pages, session=session, chunk_size=chunk_size
         )
@@ -201,13 +209,49 @@ async def run_crawling_tasks():
             data_dir, f"result-{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')}.csv"
         )
         df.to_csv(filename, index=False)
-        logger.info(f'stored results in {filename}')
+        logger.info(f"stored results in {filename}")
 
 
 if __name__ == "__main__":
     init_base_logging()
-    logger.info("started")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-u",
+        "--url",
+        type=str,
+        default=BASE_URL,
+        help="The URL of the main page",
+    )
+    parser.add_argument(
+        "--href",
+        type=str,
+        default=BASE_HREF,
+        help="Href of the manufacturers",
+    )
+    parser.add_argument(
+        "-c",
+        "--chunk-size",
+        type=int,
+        default=10,
+        help="The chunk size of the async tasks",
+    )
+    parser.add_argument(
+        "-l",
+        "--models-limit",
+        type=int,
+        default=MODELS_LIMIT,
+        help="Limit the amount of the models parsed",
+    )
+    args = parser.parse_args()
     started = dt.datetime.now()
-    asyncio.run(run_crawling_tasks())
+    logger.info(f"started with args: {args}")
+    asyncio.run(
+        run_crawling_tasks(
+            base_url=args.url,
+            href=args.href,
+            chunk_size=args.chunk_size,
+            models_limit=args.models_limit,
+        )
+    )
     finished = dt.datetime.now()
     logger.info(f"done after: {(finished-started).total_seconds()} seconds")
